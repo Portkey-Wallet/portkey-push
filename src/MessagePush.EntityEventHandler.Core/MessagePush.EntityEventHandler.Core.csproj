@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <RootNamespace>MessagePush.EntityEventHandler.Core</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MessagePush.Application\MessagePush.Application.csproj" />
+        <ProjectReference Include="..\MessagePush.Domain\MessagePush.Domain.csproj" />
+    </ItemGroup>
+
+</Project>
