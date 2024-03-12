@@ -57,6 +57,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         deviceInfo.AppStatus = input.Status.ToString();
 
         await _userDeviceProvider.UpdateUnreadInfoAsync(deviceInfo.AppId, input.UserId, input.UnreadCount);
+        Logger.LogInformation("update status index:{index}", JsonConvert.SerializeObject(deviceInfo));
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report app status, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
