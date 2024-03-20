@@ -78,7 +78,9 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendMulticastAsync(message);
-            _logger.LogDebug("multicast send, message: {message}, result: {result}", JsonConvert.SerializeObject(message), JsonConvert.SerializeObject(result));
+            _logger.LogDebug("multicast send, message: {message}, result: {result}", 
+                JsonConvert.SerializeObject(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }), 
+                result);
             
             if (result == null)
             {
@@ -116,8 +118,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendAsync(message);
-            _logger.LogDebug("send firebase, message: {message}, result: {result}", JsonConvert.SerializeObject(message), JsonConvert.SerializeObject(result));
-
+            _logger.LogDebug("send firebase, message: {message}, result: {result}", 
+                JsonConvert.SerializeObject(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }), 
+                result);
+            
             if (result.IsNullOrEmpty())
             {
                 _logger.LogError("send firebase error, result is null, title:{title}, content:{content}", title,
