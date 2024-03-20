@@ -7,6 +7,7 @@ using MessagePush.Commons;
 using MessagePush.Entities.Es;
 using Microsoft.Extensions.Logging;
 using Nest;
+using Newtonsoft.Json;
 using Volo.Abp.DependencyInjection;
 
 namespace MessagePush.MessagePush.Provider;
@@ -77,7 +78,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendMulticastAsync(message);
-
+            _logger.LogDebug("multicast send, message: {message}, result: {result}", JsonConvert.SerializeObject(message), JsonConvert.SerializeObject(result));
+            
             if (result == null)
             {
                 _logger.LogError(
@@ -114,6 +116,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendAsync(message);
+            _logger.LogDebug("send firebase, message: {message}, result: {result}", JsonConvert.SerializeObject(message), JsonConvert.SerializeObject(result));
 
             if (result.IsNullOrEmpty())
             {
