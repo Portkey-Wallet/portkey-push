@@ -45,9 +45,11 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var userIds = userDevices.Select(t => t.UserId).ToList();
         var unreadMessageInfos = await UpdateUnreadCount(userIds);
         
-        await HandleAndroidDevicesAsync(userDevices, input);
-        await HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        await HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
+        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
+        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+
+        await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
     }
 
     public async Task ClearMessageAsync(ClearMessageDto input)
@@ -150,16 +152,18 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase))
             .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
 
-        foreach (var tokenInfo in iosTokenInfos)
+        var pushTasks = iosTokenInfos.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
-            await _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
+            return _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
                 input.Data,
                 badge);
-        }
+        });
+
+        await Task.WhenAll(pushTasks);
     }
 
     private async Task HandleExtensionDevicesAsync(List<UserDeviceIndex> userDevices,
@@ -170,16 +174,18 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                 StringComparison.OrdinalIgnoreCase))
             .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
 
-        foreach (var tokenInfo in extensionDevices)
+        var pushTasks = extensionDevices.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
             Logger.LogInformation("push to extension, count: {count}", extensionDevices.Count);
-            await _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
+            return _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
                 input.Data,
                 badge);
-        }
+        });
+
+        await Task.WhenAll(pushTasks);
     }
 }
