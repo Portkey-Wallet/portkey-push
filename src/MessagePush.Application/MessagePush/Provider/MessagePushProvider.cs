@@ -20,7 +20,7 @@ public interface IMessagePushProvider
     Task BulkPushAsync(List<string> tokens, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 
-    Task PushAsync(string token, string icon, string title, string content,
+    Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 }
 
@@ -100,7 +100,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         }
     }
 
-    public async Task PushAsync(string token, string icon, string title, string content,
+    public async Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
         try
@@ -135,6 +135,16 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         {
             _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
                 content);
+            HandleExceptionAsync(e, indexId, token);
+        }
+    }
+    
+    private async void HandleExceptionAsync(Exception e, string indexId, string token)
+    {
+        if (e.Message.Contains("Requested entity was not found"))
+        {
+            _logger.LogError(e, "Exception occurred during Firebase push. Token has expired. Attempting to delete token. IndexId: {indexId}, Token: {token}", indexId, token);
+            await _userDeviceRepository.DeleteAsync(indexId);
         }
     }
 }
