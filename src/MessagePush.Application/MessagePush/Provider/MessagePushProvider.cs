@@ -141,7 +141,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
     
     private async void HandleExceptionAsync(Exception e, string indexId, string token)
     {
-        if (e.Message.Contains("Requested entity was not found"))
+        if (e.Message.Contains("Requested entity was not found") 
+            || e.Message.Contains("The registration token is not a valid FCM registration token"))
         {
             _logger.LogError(e, "Exception occurred during Firebase push. Token has expired. Attempting to delete token. IndexId: {indexId}, Token: {token}", indexId, token);
             await _userDeviceRepository.DeleteAsync(indexId);
