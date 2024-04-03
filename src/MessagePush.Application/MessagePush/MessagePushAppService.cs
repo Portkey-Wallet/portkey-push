@@ -45,11 +45,9 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var userIds = userDevices.Select(t => t.UserId).ToList();
         var unreadMessageInfos = await UpdateUnreadCount(userIds);
         
-        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
-        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
-
-        await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
+        HandleAndroidDevicesAsync(userDevices, input);
+        HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
+        HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
     }
 
     public async Task ClearMessageAsync(ClearMessageDto input)
@@ -152,7 +150,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase))
             .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
 
-        var pushTasks = iosTokenInfos.Select(tokenInfo =>
+        _ = iosTokenInfos.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
@@ -162,8 +160,6 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                 input.Data,
                 badge);
         });
-
-        await Task.WhenAll(pushTasks);
     }
 
     private async Task HandleExtensionDevicesAsync(List<UserDeviceIndex> userDevices,
@@ -174,7 +170,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                 StringComparison.OrdinalIgnoreCase))
             .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
 
-        var pushTasks = extensionDevices.Select(tokenInfo =>
+        _ = extensionDevices.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
@@ -185,7 +181,5 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                 input.Data,
                 badge);
         });
-
-        await Task.WhenAll(pushTasks);
     }
 }
