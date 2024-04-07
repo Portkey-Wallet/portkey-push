@@ -80,7 +80,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             var result = await FirebaseMessaging.DefaultInstance.SendMulticastAsync(message);
             _logger.LogDebug("multicast send, message: {message}, result: {result}", 
                 JsonConvert.SerializeObject(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }), 
-                result);
+                JsonConvert.SerializeObject(result, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }));
             
             if (result == null)
             {
