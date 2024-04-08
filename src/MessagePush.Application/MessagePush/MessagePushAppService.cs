@@ -140,9 +140,8 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         // android user
         var androidDevices = userDevices.Where(t =>
             t.DeviceInfo.DeviceType.Equals(DeviceType.Android.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
-
-        var androidTokens = androidDevices.Select(t => t.RegistrationToken).ToList();
-        await _messagePushProvider.BulkPushAsync(androidTokens, input.Icon, input.Title, input.Content, input.Data);
+        
+        await _messagePushProvider.BulkPushAsync(androidDevices, input.Icon, input.Title, input.Content, input.Data);
     }
 
     private async Task HandleAppleDevicesAsync(List<UserDeviceIndex> userDevices,

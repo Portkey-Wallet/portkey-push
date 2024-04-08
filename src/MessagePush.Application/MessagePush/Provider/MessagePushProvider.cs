@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using FirebaseAdmin.Messaging;
 using MessagePush.Commons;
 using MessagePush.Entities.Es;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Nest;
 using Newtonsoft.Json;
 using Volo.Abp.DependencyInjection;
@@ -17,7 +19,7 @@ public interface IMessagePushProvider
     Task<List<UserDeviceIndex>> GetUserDevicesAsync(List<string> userIds, string appId);
     Task<UserDeviceIndex> GetUserDeviceAsync(string userId, string deviceId, string appId);
 
-    Task BulkPushAsync(List<string> tokens, string icon, string title, string content,
+    Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 
     Task PushAsync(string indexId, string token, string icon, string title, string content,
@@ -60,9 +62,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         return await _userDeviceRepository.GetAsync(Filter);
     }
 
-    public async Task BulkPushAsync(List<string> tokens, string icon, string title, string content,
+    public async Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
+        var tokens = userDevice.Select(t => t.RegistrationToken).ToList();
         try
         {
             if (tokens.IsNullOrEmpty()) return;
@@ -92,6 +95,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             _logger.LogDebug("multicast send success, title:{title}, content:{content}, successCount:{successCount}",
                 title, content,
                 result.SuccessCount);
+            // Without using the 'await' keyword
+            TryHandleExceptionAsync(userDevice, result);
         }
         catch (Exception e)
         {
@@ -135,16 +140,29 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         {
             _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
                 content);
-            HandleExceptionAsync(e, indexId, token);
+            // Without using the 'await' keyword
+            HandleExceptionAsync(e.Message, indexId, token);
         }
     }
     
-    private async void HandleExceptionAsync(Exception e, string indexId, string token)
+    private void TryHandleExceptionAsync(List<UserDeviceIndex> userDevice, BatchResponse batchResponse) 
     {
-        if (e.Message.Contains("Requested entity was not found") 
-            || e.Message.Contains("The registration token is not a valid FCM registration token"))
+        if (batchResponse == null || batchResponse.Responses.IsNullOrEmpty()) return;
+        for (var i = 0; i < batchResponse.Responses.Count; i++)
         {
-            _logger.LogError(e, "Exception occurred during Firebase push. Token has expired. Attempting to delete token. IndexId: {indexId}, Token: {token}", indexId, token);
+            var response = batchResponse.Responses[i];
+            if (response == null || response.Exception == null) continue;
+            var user = userDevice[i];
+            HandleExceptionAsync(response.Exception.Message, user.Id, user.RegistrationToken);
+        }
+    }
+    
+    private async void HandleExceptionAsync(string exMessage, string indexId, string token)
+    {
+        if (exMessage.Contains("Requested entity was not found") 
+            || exMessage.Contains("The registration token is not a valid FCM registration token"))
+        {
+            _logger.LogError("Exception occurred during Firebase push. Token has expired. Attempting to delete token. IndexId: {indexId}, Token: {token}", indexId, token);
             await _userDeviceRepository.DeleteAsync(indexId);
         }
     }
