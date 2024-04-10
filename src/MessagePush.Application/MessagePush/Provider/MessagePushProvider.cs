@@ -95,7 +95,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             _logger.LogDebug("multicast send success, title:{title}, content:{content}, successCount:{successCount}",
                 title, content,
                 result.SuccessCount);
-            // Without using the 'await' keyword
+            
             TryHandleExceptionAsync(userDevice, result);
         }
         catch (Exception e)
@@ -140,8 +140,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         {
             _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
                 content);
-            // Without using the 'await' keyword
-            HandleExceptionAsync(e.Message, indexId, token);
+            
+            _ = HandleExceptionAsync(e.Message, indexId, token);
         }
     }
     
@@ -153,11 +153,12 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             var response = batchResponse.Responses[i];
             if (response == null || response.Exception == null) continue;
             var user = userDevice[i];
-            HandleExceptionAsync(response.Exception.Message, user.Id, user.RegistrationToken);
+            
+            _ = HandleExceptionAsync(response.Exception.Message, user.Id, user.RegistrationToken);
         }
     }
     
-    private async void HandleExceptionAsync(string exMessage, string indexId, string token)
+    private async Task HandleExceptionAsync(string exMessage, string indexId, string token)
     {
         if (exMessage.Contains(ResponseErrorMessageConstants.EntityNotFoundErrorMessage) 
             || exMessage.Contains(ResponseErrorMessageConstants.InvalidFcmTokenErrorMessage))
