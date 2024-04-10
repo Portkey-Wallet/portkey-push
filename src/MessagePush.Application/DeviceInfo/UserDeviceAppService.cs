@@ -8,6 +8,7 @@ using MessagePush.DeviceInfo.Provider;
 using MessagePush.Entities.Es;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Volo.Abp;
 
 namespace MessagePush.DeviceInfo;
@@ -29,6 +30,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
 
     public async Task ReportDeviceInfoAsync(UserDeviceInfoDto input)
     {
+        Logger.LogInformation("report device info input, data:{data}", JsonConvert.SerializeObject(input));
         var id = DeviceInfoHelper.GetId(input.UserId, input.DeviceId, input.NetworkType.ToString());
         var deviceInfo = ObjectMapper.Map<UserDeviceInfoDto, UserDeviceIndex>(input);
         deviceInfo.Id = id;
@@ -36,6 +38,10 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         deviceInfo.AppStatus = AppStatus.Foreground.ToString();
         deviceInfo.AppId = _httpContextAccessor.HttpContext?.Request.Headers.GetOrDefault(CommonConstant.AppIdKeyName);
 
+        Logger.LogInformation("update index:{index}", JsonConvert.SerializeObject(deviceInfo));
+        
+        await Task.Delay(1000); // Delay for 1 second for testing
+        
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report device info, appId: {appId}, id: {id}", deviceInfo.AppId ?? string.Empty, id);
     }
@@ -54,6 +60,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         deviceInfo.AppStatus = input.Status.ToString();
 
         await _userDeviceProvider.UpdateUnreadInfoAsync(deviceInfo.AppId, input.UserId, input.UnreadCount);
+        Logger.LogInformation("update status index:{index}", JsonConvert.SerializeObject(deviceInfo));
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report app status, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
@@ -83,7 +90,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         Logger.LogDebug("report switch network, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
     }
-    
+
     public async Task UpdateUnreadMessageAsync(UnreadMessageDto input)
     {
         var appId = GetFromHeader();

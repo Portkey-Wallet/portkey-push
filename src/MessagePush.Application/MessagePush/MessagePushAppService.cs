@@ -39,21 +39,24 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var appId = GetAppId();
         var userDevices = await _messagePushProvider.GetUserDevicesAsync(input.UserIds, appId);
         userDevices = userDevices?.Where(t =>
-            !t.AppStatus.Equals(AppStatus.Foreground.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
+            !t.AppStatus.Equals(AppStatus.Foreground.ToString(), StringComparison.OrdinalIgnoreCase) &&
+            t.ModificationTime > DateTime.Now.AddMonths(-2)).ToList<UserDeviceIndex>();
         if (userDevices.IsNullOrEmpty()) return;
 
         var userIds = userDevices.Select(t => t.UserId).ToList();
         var unreadMessageInfos = await UpdateUnreadCount(userIds);
         
-        await HandleAndroidDevicesAsync(userDevices, input);
-        await HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        await HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
+        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
+        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+
+        await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
     }
 
     public async Task ClearMessageAsync(ClearMessageDto input)
     {
         var userDevice = await _messagePushProvider.GetUserDeviceAsync(input.UserId, input.DeviceId, input.AppId);
-        await _messagePushProvider.PushAsync(userDevice.RegistrationToken, string.Empty,
+        await _messagePushProvider.PushAsync(userDevice.Id, userDevice.RegistrationToken, string.Empty,
             CommonConstant.DefaultTitle,
             CommonConstant.DefaultContent, input.Data, badge: 0);
     }
@@ -137,9 +140,8 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         // android user
         var androidDevices = userDevices.Where(t =>
             t.DeviceInfo.DeviceType.Equals(DeviceType.Android.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
-
-        var androidTokens = androidDevices.Select(t => t.RegistrationToken).ToList();
-        await _messagePushProvider.BulkPushAsync(androidTokens, input.Icon, input.Title, input.Content, input.Data);
+        
+        await _messagePushProvider.BulkPushAsync(androidDevices, input.Icon, input.Title, input.Content, input.Data);
     }
 
     private async Task HandleAppleDevicesAsync(List<UserDeviceIndex> userDevices,
@@ -148,18 +150,20 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         // ios users
         var iosTokenInfos = userDevices
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase))
-            .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
+            .Select(t => new { t.Id, t.UserId, t.RegistrationToken }).ToList();
 
-        foreach (var tokenInfo in iosTokenInfos)
+        var pushTasks = iosTokenInfos.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
-            await _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
+            return _messagePushProvider.PushAsync(tokenInfo.Id, tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
                 input.Data,
                 badge);
-        }
+        });
+        
+        await Task.WhenAll(pushTasks);
     }
 
     private async Task HandleExtensionDevicesAsync(List<UserDeviceIndex> userDevices,
@@ -168,18 +172,20 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var extensionDevices = userDevices
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.Extension.ToString(),
                 StringComparison.OrdinalIgnoreCase))
-            .Select(t => new { t.UserId, t.RegistrationToken }).ToList();
+            .Select(t => new { t.Id, t.UserId, t.RegistrationToken }).ToList();
 
-        foreach (var tokenInfo in extensionDevices)
+        var pushTasks = extensionDevices.Select(tokenInfo =>
         {
             var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
                 ?.UnreadMessageInfos;
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
             Logger.LogInformation("push to extension, count: {count}", extensionDevices.Count);
-            await _messagePushProvider.PushAsync(tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
+            return _messagePushProvider.PushAsync(tokenInfo.Id, tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
                 input.Data,
                 badge);
-        }
+        });
+
+        await Task.WhenAll(pushTasks);
     }
 }
