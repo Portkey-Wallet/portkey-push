@@ -41,9 +41,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         deviceInfo.AppId = _httpContextAccessor.HttpContext?.Request.Headers.GetOrDefault(CommonConstant.AppIdKeyName);
 
         Logger.LogInformation("update index:{index}", JsonConvert.SerializeObject(deviceInfo));
-        
-        await Task.Delay(1000); // Delay for 1 second for testing
-        
+
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report device info, appId: {appId}, id: {id}", deviceInfo.AppId ?? string.Empty, id);
         
