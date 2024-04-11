@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using FirebaseAdmin.Messaging;
 using MessagePush.Commons;
 using MessagePush.Entities.Es;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Nest;
+using Newtonsoft.Json;
 using Volo.Abp.DependencyInjection;
 
 namespace MessagePush.MessagePush.Provider;
@@ -16,10 +19,10 @@ public interface IMessagePushProvider
     Task<List<UserDeviceIndex>> GetUserDevicesAsync(List<string> userIds, string appId);
     Task<UserDeviceIndex> GetUserDeviceAsync(string userId, string deviceId, string appId);
 
-    Task BulkPushAsync(List<string> tokens, string icon, string title, string content,
+    Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 
-    Task PushAsync(string token, string icon, string title, string content,
+    Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 }
 
@@ -59,9 +62,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         return await _userDeviceRepository.GetAsync(Filter);
     }
 
-    public async Task BulkPushAsync(List<string> tokens, string icon, string title, string content,
+    public async Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
+        var tokens = userDevice.Select(t => t.RegistrationToken).ToList();
         try
         {
             if (tokens.IsNullOrEmpty()) return;
@@ -77,7 +81,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendMulticastAsync(message);
-
+            _logger.LogDebug("multicast send, message: {message}, result: {result}", 
+                JsonConvert.SerializeObject(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }), 
+                JsonConvert.SerializeObject(result, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }));
+            
             if (result == null)
             {
                 _logger.LogError(
@@ -88,6 +95,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             _logger.LogDebug("multicast send success, title:{title}, content:{content}, successCount:{successCount}",
                 title, content,
                 result.SuccessCount);
+            
+            TryHandleExceptionAsync(userDevice, result);
         }
         catch (Exception e)
         {
@@ -96,7 +105,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         }
     }
 
-    public async Task PushAsync(string token, string icon, string title, string content,
+    public async Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
         try
@@ -114,7 +123,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             };
 
             var result = await FirebaseMessaging.DefaultInstance.SendAsync(message);
-
+            _logger.LogDebug("send firebase, message: {message}, result: {result}", 
+                JsonConvert.SerializeObject(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }), 
+                result);
+            
             if (result.IsNullOrEmpty())
             {
                 _logger.LogError("send firebase error, result is null, title:{title}, content:{content}", title,
@@ -128,6 +140,31 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         {
             _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
                 content);
+            
+            _ = HandleExceptionAsync(e.Message, indexId, token);
+        }
+    }
+    
+    private void TryHandleExceptionAsync(List<UserDeviceIndex> userDevice, BatchResponse batchResponse) 
+    {
+        if (batchResponse == null || batchResponse.Responses.IsNullOrEmpty()) return;
+        for (var i = 0; i < batchResponse.Responses.Count; i++)
+        {
+            var response = batchResponse.Responses[i];
+            if (response == null || response.Exception == null) continue;
+            var user = userDevice[i];
+            
+            _ = HandleExceptionAsync(response.Exception.Message, user.Id, user.RegistrationToken);
+        }
+    }
+    
+    private async Task HandleExceptionAsync(string exMessage, string indexId, string token)
+    {
+        if (exMessage.Contains(ResponseErrorMessageConstants.EntityNotFoundErrorMessage) 
+            || exMessage.Contains(ResponseErrorMessageConstants.InvalidFcmTokenErrorMessage))
+        {
+            _logger.LogError("Exception occurred during Firebase push. Token has expired. Attempting to delete token. IndexId: {indexId}, Token: {token}", indexId, token);
+            await _userDeviceRepository.DeleteAsync(indexId);
         }
     }
 }

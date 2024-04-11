@@ -125,8 +125,7 @@ public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
                 t.DeviceInfo.DeviceType.Equals(DeviceType.Android.ToString(), StringComparison.OrdinalIgnoreCase) ==
                 false).ToList();
 
-            var androidTokens = androidDevices.Select(t => t.RegistrationToken).ToList();
-            await _messagePushProvider.BulkPushAsync(androidTokens, string.Empty, CommonConstant.DefaultTitle,
+            await _messagePushProvider.BulkPushAsync(androidDevices, string.Empty, CommonConstant.DefaultTitle,
                 CommonConstant.DefaultContent, new Dictionary<string, string>(), badge: 0);
         }
     }
