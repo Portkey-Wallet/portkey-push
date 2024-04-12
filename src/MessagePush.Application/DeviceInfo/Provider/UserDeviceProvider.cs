@@ -17,6 +17,8 @@ public interface IUserDeviceProvider
     Task DeleteUserDeviceAsync(string id);
     Task<UnreadMessageIndex> GetUnreadInfoAsync(string userId);
     Task UpdateUnreadInfoAsync(string appId, string userId, int unreadCount);
+    Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria);
+    Task<List<UserDeviceIndex>> GetExpiredDeviceInfos(ExpiredDeviceCriteria criteria);
 }
 
 public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
@@ -128,5 +130,36 @@ public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
             await _messagePushProvider.BulkPushAsync(androidDevices, string.Empty, CommonConstant.DefaultTitle,
                 CommonConstant.DefaultContent, new Dictionary<string, string>(), badge: 0);
         }
+    }
+    
+    public async Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria)
+    {
+        var filter = new Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>(q =>
+        {
+            var baseQuery = q.Term(t => t.Field(f => f.DeviceId).Value(criteria.DeviceId)) &&
+                            !q.Terms(t => t.Field(f => f.UserId).Terms(criteria.LoginUserIds.ToArray()));
+
+            return baseQuery;
+        });
+
+        var result = await _userDeviceRepository.GetListAsync(filter);
+        return result.Item2;
+    }
+
+    public async Task<List<UserDeviceIndex>> GetExpiredDeviceInfos(ExpiredDeviceCriteria criteria)
+    {
+        var filter = new Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>(q =>
+            q.DateRange(r => r
+                .Field(f => f.ModificationTime)
+                .LessThan(DateMath.Now.Subtract(TimeSpan.FromDays(criteria.FromDays)))
+            )
+        );
+
+        var sort = new Func<SortDescriptor<UserDeviceIndex>, IPromise<IList<ISort>>>(s =>
+            s.Ascending(f => f.ModificationTime)
+        );
+
+        var result = await _userDeviceRepository.GetSortListAsync(filter, sortFunc: sort, limit: criteria.Limit);
+        return result.Item2;
     }
 }

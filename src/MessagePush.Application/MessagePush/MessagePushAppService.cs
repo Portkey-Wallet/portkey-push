@@ -9,8 +9,10 @@ using MessagePush.DeviceInfo;
 using MessagePush.Entities.Es;
 using MessagePush.MessagePush.Dtos;
 using MessagePush.MessagePush.Provider;
+using MessagePush.Options;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nest;
 using Newtonsoft.Json;
 using Volo.Abp;
@@ -24,14 +26,16 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
     private readonly IMessagePushProvider _messagePushProvider;
     private readonly INESTRepository<UnreadMessageIndex, string> _unreadMessageIndexRepository;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly MessagePushOptions _messagePushOptions;
 
     public MessagePushAppService(IMessagePushProvider messagePushProvider,
         INESTRepository<UnreadMessageIndex, string> unreadMessageIndexRepository,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor, IOptionsSnapshot<MessagePushOptions> messagePushOptions)
     {
         _messagePushProvider = messagePushProvider;
         _unreadMessageIndexRepository = unreadMessageIndexRepository;
         _httpContextAccessor = httpContextAccessor;
+        _messagePushOptions = messagePushOptions.Value;
     }
 
     public async Task PushMessageAsync(MessagePushDto input)
@@ -40,17 +44,19 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var userDevices = await _messagePushProvider.GetUserDevicesAsync(input.UserIds, appId);
         userDevices = userDevices?.Where(t =>
             !t.AppStatus.Equals(AppStatus.Foreground.ToString(), StringComparison.OrdinalIgnoreCase) &&
-            t.ModificationTime > DateTime.Now.AddMonths(-2)).ToList<UserDeviceIndex>();
+            t.ModificationTime > DateTime.Now.SubtractDays(_messagePushOptions.ExpiredDeviceInfoFromDays)).ToList();
         if (userDevices.IsNullOrEmpty()) return;
 
         var userIds = userDevices.Select(t => t.UserId).ToList();
         var unreadMessageInfos = await UpdateUnreadCount(userIds);
         
-        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
-        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
-
-        await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
+        // var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
+        // var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
+        // var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        //
+        // await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
+        
+        await HandleAllDevicesAsync(userDevices, unreadMessageInfos, input);
     }
 
     public async Task ClearMessageAsync(ClearMessageDto input)
@@ -187,5 +193,11 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         });
 
         await Task.WhenAll(pushTasks);
+    }
+    
+    private async Task HandleAllDevicesAsync(List<UserDeviceIndex> userDevices, List<UnreadMessageIndex> unreadMessageInfos, MessagePushDto input)
+    {
+        await _messagePushProvider.SendAllAsync(userDevices, input.Icon, input.Title, input.Content,
+            input.Data, unreadMessageInfos);
     }
 }

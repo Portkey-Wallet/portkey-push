@@ -9,7 +9,6 @@ using MessagePush.DeviceInfo.Provider;
 using MessagePush.Entities.Es;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Nest;
 using Newtonsoft.Json;
 using Volo.Abp;
 
@@ -73,32 +72,16 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
     
     private async void TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria criteria)
     {
-        
-
-        var invalidDeviceInfos = await GetInvalidDeviceInfos(criteria);
+        var invalidDeviceInfos = await _userDeviceProvider.GetInvalidDeviceInfos(criteria);
         if (invalidDeviceInfos != null && invalidDeviceInfos.Any())
         {
             Logger.LogDebug("Invalid device attempts exist, trying to delete them.");
             foreach (var invalidDeviceInfo in invalidDeviceInfos)
             {
-                await _deviceInfoRepository.DeleteAsync(invalidDeviceInfo.Id);
+                await _userDeviceProvider.DeleteUserDeviceAsync(invalidDeviceInfo.Id);
                 Logger.LogDebug("delete invalid device info, id: {id}, invalidDeviceInfo: {invalidDeviceInfo}", invalidDeviceInfo.Id, JsonConvert.SerializeObject(invalidDeviceInfo));
             }
         }
-    }
-    
-    private async Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria)
-    {
-        var filter = new Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>(q =>
-        {
-            var baseQuery = q.Term(t => t.Field(f => f.DeviceId).Value(criteria.DeviceId)) &&
-                            !q.Terms(t => t.Field(f => f.UserId).Terms(criteria.LoginUserIds.ToArray()));
-
-            return baseQuery;
-        });
-
-        var result = await _deviceInfoRepository.GetListAsync(filter);
-        return result.Item2;
     }
 
     public async Task ExitWalletAsync(ExitWalletDto input)
