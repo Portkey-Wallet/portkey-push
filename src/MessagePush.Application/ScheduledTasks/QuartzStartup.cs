@@ -38,8 +38,11 @@ public class QuartzStartup : ApplicationService, IHostedService
         scheduler.Start();
 
         IJobDetail job = JobBuilder.Create<DeleteExpiredDeviceInfoJob>().Build();
-
+        Logger.LogInformation("IJobDetail: {json}", JsonConvert.SerializeObject(job));
+        
+        
         ITrigger trigger = TriggerBuilder.Create()
+            .StartNow() // Start the trigger immediately
             .WithDailyTimeIntervalSchedule
             (s =>
                 s.WithIntervalInHours(24)
