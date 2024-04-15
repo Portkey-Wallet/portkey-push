@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Volo.Abp.Application.Services;
 
-namespace MessagePush.ScheduledTasks;
+namespace MessagePush.ScheduledTasks.Jobs;
 
 using Quartz;
 
