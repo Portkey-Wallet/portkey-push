@@ -2,6 +2,7 @@ using System;
 using MessagePush.Options;
 using Microsoft.Extensions.Options;
 using Volo.Abp.Application.Services;
+using Volo.Abp.Auditing;
 
 namespace MessagePush.ScheduledTasks;
 
@@ -12,6 +13,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+[DisableAuditing]
 public class QuartzStartup : ApplicationService, IHostedService
 {
     
