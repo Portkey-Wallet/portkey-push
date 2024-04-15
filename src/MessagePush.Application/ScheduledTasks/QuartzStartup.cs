@@ -30,7 +30,6 @@ public class QuartzStartup : ApplicationService, IHostedService
     
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation("ScheduledTasksOptions: {json}", JsonConvert.SerializeObject(_scheduledTasks));
         Logger.LogInformation(_serviceProvider.GetService(typeof(DeleteExpiredDeviceInfoJob)).ToString());
         Logger.LogInformation("Quartz service is starting");
         IScheduler scheduler = StdSchedulerFactory.GetDefaultScheduler().Result;
@@ -38,11 +37,8 @@ public class QuartzStartup : ApplicationService, IHostedService
         scheduler.Start();
 
         IJobDetail job = JobBuilder.Create<DeleteExpiredDeviceInfoJob>().Build();
-        Logger.LogInformation("IJobDetail: {json}", JsonConvert.SerializeObject(job));
-        
         
         ITrigger trigger = TriggerBuilder.Create()
-            .StartNow() // Start the trigger immediately
             .WithDailyTimeIntervalSchedule
             (s =>
                 s.WithIntervalInHours(24)
