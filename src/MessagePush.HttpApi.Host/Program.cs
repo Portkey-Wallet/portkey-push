@@ -40,7 +40,7 @@ public class Program
                 .UseAutofac()
                 .UseSerilog();
             builder.Services.AddSignalR();
-            // builder.Services.AddHostedService<QuartzStartup>();
+            builder.Services.AddHostedService<QuartzStartup>();
             await builder.AddApplicationAsync<MessagePushHttpApiHostModule>();
             var app = builder.Build();
             await app.InitializeApplicationAsync();
