@@ -1,3 +1,4 @@
+using System;
 using MessagePush.Options;
 using Microsoft.Extensions.Options;
 using Volo.Abp.Application.Services;
@@ -15,17 +16,19 @@ public class QuartzStartup : ApplicationService, IHostedService
 {
     
     private readonly ScheduledTasksOptions _scheduledTasks;
+    private readonly IServiceProvider _serviceProvider;
 
-    public QuartzStartup(IOptionsSnapshot<ScheduledTasksOptions> scheduledTasks)
+    public QuartzStartup(IOptionsSnapshot<ScheduledTasksOptions> scheduledTasks, IServiceProvider serviceProvider)
     {
         _scheduledTasks = scheduledTasks.Value;
+        _serviceProvider = serviceProvider;
     }
-    
     
     public Task StartAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("Quartz service is starting");
         IScheduler scheduler = StdSchedulerFactory.GetDefaultScheduler().Result;
+        scheduler.JobFactory = new QuartzJobFactory(_serviceProvider); // Set the custom JobFactory
         scheduler.Start();
 
         IJobDetail job = JobBuilder.Create<DeleteExpiredDeviceInfoJob>().Build();
