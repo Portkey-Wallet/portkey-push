@@ -50,13 +50,13 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var userIds = userDevices.Select(t => t.UserId).ToList();
         var unreadMessageInfos = await UpdateUnreadCount(userIds);
         
-        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
-        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        // var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
+        // var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
+        // var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        //
+        // await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
         
-        await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
-        
-        // await HandleAllDevicesAsync(userDevices, unreadMessageInfos, input);
+        await HandleAllDevicesAsync(userDevices, unreadMessageInfos, input);
     }
 
     public async Task ClearMessageAsync(ClearMessageDto input)
