@@ -110,8 +110,10 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                         UnreadCount = 1
                     });
                 }
-
-                imMessage.UnreadCount++;
+                else
+                {
+                    imMessage.UnreadCount++;
+                }
             }
 
             if (!unreadInfos.IsNullOrEmpty())
@@ -152,10 +154,10 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         List<UnreadMessageIndex> unreadMessageInfos, MessagePushDto input)
     {
         // ios users
-        userDevices = userDevices
+        var iosDevices = userDevices
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
 
-        await _messagePushProvider.SendAllAsync(userDevices, input.Icon, input.Title, input.Content,
+        await _messagePushProvider.SendAllAsync(iosDevices, input.Icon, input.Title, input.Content,
             input.Data, unreadMessageInfos);
     }
 

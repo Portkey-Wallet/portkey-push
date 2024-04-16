@@ -43,7 +43,7 @@ public class QuartzStartup : ApplicationService, IHostedService
                 s.WithIntervalInHours(24)
                     .OnEveryDay()
                     .StartingDailyAt(TimeOfDay.HourAndMinuteOfDay(
-                        _scheduledTasks.ExecutionHour, 0))
+                        _scheduledTasks.ExecutionHour, 20))
             )
             .Build();
 
