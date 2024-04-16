@@ -216,6 +216,8 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
                 message.Apns = MessageHelper.GetApnsConfig(badge);
                 break;
             case DeviceType.Extension:
+                message.Android = MessageHelper.GetAndroidConfig(1);
+                message.Apns = MessageHelper.GetApnsConfig(badge);
                 message.Webpush = MessageHelper.GetWebPushConfig(badge);
                 break;
         }
