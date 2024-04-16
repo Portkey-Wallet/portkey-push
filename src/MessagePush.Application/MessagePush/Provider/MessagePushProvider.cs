@@ -29,6 +29,18 @@ public interface IMessagePushProvider
     Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 
+    /// <summary>
+    /// Sends a notification message to a list of user devices.
+    /// This method was originally designed to support all user devices, including Android phones, iPhones, and desktop browsers.
+    /// However, during actual testing, it was found that the FCM batch send notification message interface it relies on does not support desktop browsers.
+    /// </summary>
+    /// <param name="userDevices">The list of user devices to which the notification message will be sent.</param>
+    /// <param name="icon">The icon of the notification message.</param>
+    /// <param name="title">The title of the notification message.</param>
+    /// <param name="content">The content of the notification message.</param>
+    /// <param name="data">The data of the notification message.</param>
+    /// <param name="unreadMessageInfos">The list of unread message information.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
         Dictionary<string, string> data, List<UnreadMessageIndex> unreadMessageInfos);
 }
@@ -216,8 +228,6 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
                 message.Apns = MessageHelper.GetApnsConfig(badge);
                 break;
             case DeviceType.Extension:
-                message.Android = MessageHelper.GetAndroidConfig(1);
-                message.Apns = MessageHelper.GetApnsConfig(badge);
                 message.Webpush = MessageHelper.GetWebPushConfig(badge);
                 break;
         }
