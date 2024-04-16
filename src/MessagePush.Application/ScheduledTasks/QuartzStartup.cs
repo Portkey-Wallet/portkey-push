@@ -2,7 +2,6 @@ using System;
 using MessagePush.Options;
 using MessagePush.ScheduledTasks.Jobs;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
 using Volo.Abp.Application.Services;
 using Volo.Abp.Auditing;
 
@@ -30,8 +29,8 @@ public class QuartzStartup : ApplicationService, IHostedService
     
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation(_serviceProvider.GetService(typeof(DeleteExpiredDeviceInfoJob)).ToString());
         Logger.LogInformation("Quartz service is starting");
+        
         IScheduler scheduler = StdSchedulerFactory.GetDefaultScheduler().Result;
         scheduler.JobFactory = new QuartzJobFactory(_serviceProvider); // Set the custom JobFactory
         scheduler.Start();

@@ -28,6 +28,8 @@ public class DeleteExpiredDeviceInfoJob : ApplicationService, IJob
     // If the application is deployed in a cluster in the future, this job may need to be modified to work correctly in a clustered environment.
     public async Task Execute(IJobExecutionContext context)
     {
+        Logger.LogInformation("Entering Execute method in DeleteExpiredDeviceInfoJob");
+        
         var criteria = new ExpiredDeviceCriteria()
         {
             FromDays = _scheduledTasks.ExpiredDeviceInfoFromDays,
@@ -58,5 +60,7 @@ public class DeleteExpiredDeviceInfoJob : ApplicationService, IJob
                 expiredDeviceInfos = null;
             }
         }
+        
+        Logger.LogInformation("Exiting Execute method in DeleteExpiredDeviceInfoJob");
     }
 }
