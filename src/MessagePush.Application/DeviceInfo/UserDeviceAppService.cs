@@ -72,6 +72,12 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
     
     private async void TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria criteria)
     {
+        
+        if (criteria.LoginUserIds == null || !criteria.LoginUserIds.Any())
+        {
+            return;
+        }
+        
         var invalidDeviceInfos = await _userDeviceProvider.GetInvalidDeviceInfos(criteria);
         if (invalidDeviceInfos != null && invalidDeviceInfos.Any())
         {
