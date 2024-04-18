@@ -8,6 +8,7 @@ using MessagePush.Common;
 using MessagePush.Commons;
 using MessagePush.DeviceInfo;
 using MessagePush.Entities.Es;
+using MessagePush.Entities.Redis;
 using MessagePush.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -39,10 +40,10 @@ public interface IMessagePushProvider
     /// <param name="title">The title of the notification message.</param>
     /// <param name="content">The content of the notification message.</param>
     /// <param name="data">The data of the notification message.</param>
-    /// <param name="unreadMessageInfos">The list of unread message information.</param>
+    /// <param name="unreadMessages">The list of unread message information.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
-        Dictionary<string, string> data, List<UnreadMessageIndex> unreadMessageInfos);
+        Dictionary<string, string> data, List<UnreadMessage> unreadMessages);
 }
 
 public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
@@ -167,7 +168,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
     }
 
     public async Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
-        Dictionary<string, string> data, List<UnreadMessageIndex> unreadMessageInfos)
+        Dictionary<string, string> data, List<UnreadMessage> unreadMessages)
     {
         var messages = new List<Message>();
 
@@ -180,8 +181,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             {
                 foreach (var device in devicesOfType)
                 {
-                    var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == device.UserId)
-                        ?.UnreadMessageInfos;
+                    var unreadMessage = unreadMessages.FirstOrDefault(t => t.UserId == device.UserId);
                     var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
                     var message = CreateMessage(device, icon, title, content, data, badge, deviceType);
                     messages.Add(message);
