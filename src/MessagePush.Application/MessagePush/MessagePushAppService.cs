@@ -84,7 +84,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                         AppId = "PortKey",
                         MessageType = MessageType.RelationOne.ToString()
                     };
-                    var value = _redisClient.GetAndIncrement(unreadMessage.GetKey());
+                    var value = _redisClient.IncrementAndGet(unreadMessage.GetKey());
                     unreadMessage.UnreadCount = value;
                     unreadMessages.Add(unreadMessage);
                 }));
