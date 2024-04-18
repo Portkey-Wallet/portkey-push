@@ -2,11 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using AElf.Indexing.Elasticsearch;
 using MessagePush.Common;
 using MessagePush.Commons;
 using MessagePush.DeviceInfo;
-using MessagePush.Entities;
 using MessagePush.Entities.Es;
 using MessagePush.Entities.Redis;
 using MessagePush.MessagePush.Dtos;
@@ -49,7 +47,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             t.ModificationTime > DateTime.Now.SubtractDays(_messagePushOptions.ExpiredDeviceInfoFromDays)).ToList();
         if (userDevices.IsNullOrEmpty()) return;
 
-        var userIds = userDevices.Select(t => t.UserId).ToList();
+        var userIds = userDevices.Select(t => t.UserId).Distinct().ToList();
         // var unreadMessageInfos = await UpdateUnreadCount(userIds);
         var unreadMessages = await UpdateUnreadCountAsync(userIds);
 
@@ -84,7 +82,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                     {
                         UserId = userId,
                         AppId = "PortKey",
-                        MessageType = "RelationOne"
+                        MessageType = MessageType.RelationOne.ToString()
                     };
                     var value = _redisClient.GetAndIncrement(unreadMessage.GetKey());
                     unreadMessage.UnreadCount = value;
