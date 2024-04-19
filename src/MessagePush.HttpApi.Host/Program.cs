@@ -21,6 +21,7 @@ public class Program
             Log.Information("Starting MessagePush.HttpApi.Host.");
             var builder = WebApplication.CreateBuilder(args);
             builder.Host.AddAppSettingsSecretsJson()
+                .UseApolloForConfigureHostBuilder()
                 .UseAutofac()
                 .UseSerilog();
             builder.Services.AddSignalR();
