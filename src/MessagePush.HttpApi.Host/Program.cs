@@ -39,8 +39,10 @@ public class Program
             builder.Host.AddAppSettingsSecretsJson()
                 .UseAutofac()
                 .UseSerilog();
+            
             builder.Services.AddSignalR();
             builder.Services.AddHostedService<QuartzStartup>();
+            
             await builder.AddApplicationAsync<MessagePushHttpApiHostModule>();
             var app = builder.Build();
             await app.InitializeApplicationAsync();
