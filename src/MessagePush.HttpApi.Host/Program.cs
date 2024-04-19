@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
-using MessagePush.Common;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -13,14 +13,29 @@ public class Program
 {
     public async static Task<int> Main(string[] args)
     {
-        Log.Logger = LogHelper.CreateLogger(LogEventLevel.Debug);
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json")
+            .Build();
+        Log.Logger = new LoggerConfiguration()
+#if DEBUG
+            .MinimumLevel.Debug()
+#else
+            .MinimumLevel.Information()
+#endif
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .Enrich.FromLogContext()
+            .ReadFrom.Configuration(configuration)
+            
+#if DEBUG
+            .WriteTo.Async(c => c.Console())
+#endif          
+            .CreateLogger();
 
         try
         {
             Log.Information("Starting MessagePush.HttpApi.Host.");
             var builder = WebApplication.CreateBuilder(args);
             builder.Host.AddAppSettingsSecretsJson()
-                .UseApolloForConfigureHostBuilder()
                 .UseAutofac()
                 .UseSerilog();
             builder.Services.AddSignalR();

@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using MessagePush.Commons;
 using MessagePush.Entities.Es;
+using MessagePush.Entities.Redis;
 using MessagePush.MessagePush.Provider;
+using MessagePush.Redis;
 using Nest;
 using Volo.Abp.DependencyInjection;
 
@@ -15,23 +17,23 @@ public interface IUserDeviceProvider
 {
     Task<UserDeviceIndex> GetDeviceInfoAsync(string id);
     Task DeleteUserDeviceAsync(string id);
-    Task<UnreadMessageIndex> GetUnreadInfoAsync(string userId);
     Task UpdateUnreadInfoAsync(string appId, string userId, int unreadCount);
+    Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria);
+    Task<List<UserDeviceIndex>> GetExpiredDeviceInfos(ExpiredDeviceCriteria criteria);
 }
 
 public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
 {
     private readonly INESTRepository<UserDeviceIndex, string> _userDeviceRepository;
-    private readonly INESTRepository<UnreadMessageIndex, string> _unreadMessageIndexRepository;
     private readonly IMessagePushProvider _messagePushProvider;
+    private readonly RedisClient _redisClient;
 
     public UserDeviceProvider(INESTRepository<UserDeviceIndex, string> userDeviceRepository,
-        INESTRepository<UnreadMessageIndex, string> unreadMessageIndexRepository,
-        IMessagePushProvider messagePushProvider)
+        IMessagePushProvider messagePushProvider, RedisClient redisClient)
     {
         _userDeviceRepository = userDeviceRepository;
-        _unreadMessageIndexRepository = unreadMessageIndexRepository;
         _messagePushProvider = messagePushProvider;
+        _redisClient = redisClient;
     }
 
     public async Task<UserDeviceIndex> GetDeviceInfoAsync(string id)
@@ -48,85 +50,75 @@ public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
         await _userDeviceRepository.DeleteAsync(id);
     }
 
-    public async Task<UnreadMessageIndex> GetUnreadInfoAsync(string userId)
+    public async Task<UnreadMessage> GetUnreadInfoAsync(string userId)
     {
-        var mustQuery = new List<Func<QueryContainerDescriptor<UnreadMessageIndex>, QueryContainer>>()
+        return await Task.Run(() =>
         {
-            descriptor => descriptor.Term(i => i.Field(f => f.Id).Value(userId))
-        };
+            var unreadMessage = new UnreadMessage()
+            {
+                UserId = userId,
+                AppId = "PortKey",
+                MessageType = MessageType.RelationOne.ToString()
+            };
 
-        QueryContainer Filter(QueryContainerDescriptor<UnreadMessageIndex> f) => f.Bool(b => b.Must(mustQuery));
-        return await _unreadMessageIndexRepository.GetAsync(Filter);
+            var unreadCount = _redisClient.Get(unreadMessage.GetKey());
+            unreadMessage.UnreadCount = unreadCount;
+            return unreadMessage;
+        });
     }
 
     public async Task UpdateUnreadInfoAsync(string appId, string userId, int unreadCount)
     {
-        var unreadInfo = await GetUnreadInfoAsync(userId);
+        var unreadMessage = await GetUnreadInfoAsync(userId);
         // await CheckClearMessageAsync(unreadInfo, unreadCount, userId);
 
-        if (unreadInfo == null)
+        if (unreadMessage == null)
         {
-            unreadInfo = new UnreadMessageIndex()
+            unreadMessage = new UnreadMessage()
             {
-                Id = userId,
                 UserId = userId,
                 AppId = appId,
-                UnreadMessageInfos = new List<UnreadMessageInfo>()
-            };
-        }
-
-        if (unreadInfo.UnreadMessageInfos.IsNullOrEmpty())
-        {
-            unreadInfo.UnreadMessageInfos = new List<UnreadMessageInfo>
-            {
-                new UnreadMessageInfo
-                {
-                    MessageType = MessageType.RelationOne.ToString(),
-                    UnreadCount = 0
-                }
-            };
-
-            await _unreadMessageIndexRepository.AddOrUpdateAsync(unreadInfo);
-            return;
-        }
-
-        var imMessage = unreadInfo.UnreadMessageInfos.FirstOrDefault(t =>
-            t.MessageType.Equals(MessageType.RelationOne.ToString(), StringComparison.OrdinalIgnoreCase));
-        if (imMessage == null)
-        {
-            unreadInfo.UnreadMessageInfos.Add(new UnreadMessageInfo()
-            {
                 MessageType = MessageType.RelationOne.ToString(),
-                UnreadCount = unreadCount
-            });
+                UnreadCount = unreadCount,
+            };
+            _redisClient.AddIfNotExists(unreadMessage.GetKey(), unreadMessage.UnreadCount);
         }
         else
         {
-            imMessage.UnreadCount = unreadCount;
+            unreadMessage.UnreadCount = unreadCount;
         }
 
-        await _unreadMessageIndexRepository.AddOrUpdateAsync(unreadInfo);
+        _redisClient.Set(unreadMessage.GetKey(), unreadMessage.UnreadCount);
     }
 
-    private async Task CheckClearMessageAsync(UnreadMessageIndex unreadInfo, int unreadCount, string userId)
+    public async Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria)
     {
-        if (unreadInfo == null || unreadInfo.UnreadMessageInfos.IsNullOrEmpty())
+        var filter = new Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>(q =>
         {
-            return;
-        }
+            var baseQuery = q.Term(t => t.Field(f => f.DeviceId).Value(criteria.DeviceId)) &&
+                            !q.Terms(t => t.Field(f => f.UserId).Terms(criteria.LoginUserIds.ToArray()));
 
-        if (unreadInfo.UnreadMessageInfos.Sum(t => t.UnreadCount) > 0 && unreadCount == 0)
-        {
-            //clear message of ios and extension
-            var userDevices =
-                await _messagePushProvider.GetUserDevicesAsync(new List<string>() { userId }, string.Empty);
+            return baseQuery;
+        });
 
-            var androidDevices = userDevices.Where(t =>
-                t.DeviceInfo.DeviceType.Equals(DeviceType.Android.ToString(), StringComparison.OrdinalIgnoreCase) ==
-                false).ToList();
+        var result = await _userDeviceRepository.GetListAsync(filter);
+        return result.Item2;
+    }
 
-            await _messagePushProvider.BulkPushAsync(androidDevices, string.Empty, CommonConstant.DefaultTitle,
-                CommonConstant.DefaultContent, new Dictionary<string, string>(), badge: 0);
-        }
+    public async Task<List<UserDeviceIndex>> GetExpiredDeviceInfos(ExpiredDeviceCriteria criteria)
+    {
+        var filter = new Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>(q =>
+            q.DateRange(r => r
+                .Field(f => f.ModificationTime)
+                .LessThan(DateMath.Now.Subtract(TimeSpan.FromDays(criteria.FromDays)))
+            )
+        );
+
+        var sort = new Func<SortDescriptor<UserDeviceIndex>, IPromise<IList<ISort>>>(s =>
+            s.Ascending(f => f.ModificationTime)
+        );
+
+        var result = await _userDeviceRepository.GetSortListAsync(filter, sortFunc: sort, limit: criteria.Limit);
+        return result.Item2;
     }
 }
