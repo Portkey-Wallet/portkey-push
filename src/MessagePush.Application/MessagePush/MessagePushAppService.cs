@@ -70,8 +70,6 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
     {
         List<UnreadMessage> unreadMessages = new List<UnreadMessage>();
 
-        List<Task> tasks = new List<Task>();
-
         if (userIds != null && userIds.Any())
         {
             foreach (var userId in userIds)
