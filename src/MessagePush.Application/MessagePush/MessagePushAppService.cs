@@ -66,7 +66,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             CommonConstant.DefaultContent, input.Data, badge: 0);
     }
 
-    private async Task<List<UnreadMessage>> GetUnreadMessagesAsync(List<string> userIds)
+    private List<UnreadMessage> GetUnreadMessagesAsync(List<string> userIds)
     {
         List<UnreadMessage> unreadMessages = new List<UnreadMessage>();
 
@@ -76,9 +76,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         {
             foreach (var userId in userIds)
             {
-                tasks.Add(Task.Run(() =>
-                {
-                    var unreadMessage = new UnreadMessage()
+                var unreadMessage = new UnreadMessage()
                     {
                         UserId = userId,
                         AppId = "PortKey",
@@ -87,17 +85,15 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
                     var value = _redisClient.IncrementAndGet(unreadMessage.GetKey());
                     unreadMessage.UnreadCount = value;
                     unreadMessages.Add(unreadMessage);
-                }));
             }
         }
-
-        await Task.WhenAll(tasks);
+        
         return unreadMessages;
     }
 
     private async Task<List<UnreadMessage>> UpdateUnreadCountAsync(List<string> userIds)
     {
-        var unreadMessagesAsync = await GetUnreadMessagesAsync(userIds);
+        var unreadMessagesAsync = GetUnreadMessagesAsync(userIds);
         if (unreadMessagesAsync != null && unreadMessagesAsync.Any())
         {
             foreach (var unreadMessage in unreadMessagesAsync)
