@@ -8,6 +8,7 @@ using MessagePush.DeviceInfo.Provider;
 using MessagePush.Entities.Es;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Volo.Abp;
 
 namespace MessagePush.DeviceInfo;
@@ -83,7 +84,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         Logger.LogDebug("report switch network, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
     }
-    
+
     public async Task UpdateUnreadMessageAsync(UnreadMessageDto input)
     {
         var appId = GetFromHeader();
