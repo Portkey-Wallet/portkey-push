@@ -1,4 +1,7 @@
-﻿using MessagePush.Grains;
+﻿using System.Configuration;
+using MessagePush.Grains;
+using MessagePush.Options;
+using MessagePush.Redis;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.Account;
 using Volo.Abp.AutoMapper;
@@ -30,5 +33,10 @@ public class MessagePushApplicationModule : AbpModule
     {
         Configure<AbpAutoMapperOptions>(options => { options.AddMaps<MessagePushApplicationModule>(); });
         context.Services.AddHttpClient();
+        context.Services.AddSingleton<RedisClient>();
+        
+        var configuration = context.Services.GetConfiguration();
+        Configure<ScheduledTasksOptions>(configuration.GetSection("ScheduledTasks"));
+        Configure<MessagePushOptions>(configuration.GetSection("MessagePush"));
     }
 }
