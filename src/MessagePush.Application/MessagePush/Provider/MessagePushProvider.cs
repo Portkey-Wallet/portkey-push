@@ -4,9 +4,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using FirebaseAdmin.Messaging;
+using MessagePush.Common;
 using MessagePush.Commons;
+using MessagePush.DeviceInfo;
 using MessagePush.Entities.Es;
+using MessagePush.Entities.Redis;
+using MessagePush.Options;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nest;
 using Newtonsoft.Json;
@@ -19,23 +24,40 @@ public interface IMessagePushProvider
     Task<List<UserDeviceIndex>> GetUserDevicesAsync(List<string> userIds, string appId);
     Task<UserDeviceIndex> GetUserDeviceAsync(string userId, string deviceId, string appId);
 
-    Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
+    Task BulkPushAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
 
     Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1);
+
+    /// <summary>
+    /// Sends a notification message to a list of user devices.
+    /// This method was originally designed to support all user devices, including Android phones, iPhones, and desktop browsers.
+    /// However, during actual testing, it was found that the FCM batch send notification message interface it relies on does not support desktop browsers.
+    /// </summary>
+    /// <param name="userDevices">The list of user devices to which the notification message will be sent.</param>
+    /// <param name="icon">The icon of the notification message.</param>
+    /// <param name="title">The title of the notification message.</param>
+    /// <param name="content">The content of the notification message.</param>
+    /// <param name="data">The data of the notification message.</param>
+    /// <param name="unreadMessages">The list of unread message information.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
+        Dictionary<string, string> data, List<UnreadMessage> unreadMessages);
 }
 
 public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
 {
     private readonly INESTRepository<UserDeviceIndex, string> _userDeviceRepository;
     private readonly ILogger<MessagePushProvider> _logger;
+    private readonly MessagePushOptions _messagePushOptions;
 
     public MessagePushProvider(INESTRepository<UserDeviceIndex, string> userDeviceRepository,
-        ILogger<MessagePushProvider> logger)
+        ILogger<MessagePushProvider> logger, IOptionsSnapshot<MessagePushOptions> messagePushOptions)
     {
         _userDeviceRepository = userDeviceRepository;
         _logger = logger;
+        _messagePushOptions = messagePushOptions.Value;
     }
 
     public async Task<List<UserDeviceIndex>> GetUserDevicesAsync(List<string> userIds, string appId)
@@ -62,10 +84,10 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         return await _userDeviceRepository.GetAsync(Filter);
     }
 
-    public async Task BulkPushAsync(List<UserDeviceIndex> userDevice, string icon, string title, string content,
+    public async Task BulkPushAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
-        var tokens = userDevice.Select(t => t.RegistrationToken).ToList();
+        var tokens = userDevices.Select(t => t.RegistrationToken).ToList();
         try
         {
             if (tokens.IsNullOrEmpty()) return;
@@ -93,7 +115,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
                 title, content,
                 result.SuccessCount);
             
-            TryHandleExceptionAsync(userDevice, result);
+            TryHandleExceptionAsync(userDevices, result);
         }
         catch (Exception e)
         {
@@ -138,15 +160,83 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             _ = HandleExceptionAsync(e.Message, indexId, token);
         }
     }
-    
-    private void TryHandleExceptionAsync(List<UserDeviceIndex> userDevice, BatchResponse batchResponse) 
+
+    public async Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
+        Dictionary<string, string> data, List<UnreadMessage> unreadMessages)
+    {
+        var messages = new List<Message>();
+
+        foreach (var deviceType in Enum.GetValues(typeof(DeviceType)).Cast<DeviceType>())
+        {
+            var devicesOfType = userDevices.Where(t =>
+                t.DeviceInfo.DeviceType.Equals(deviceType.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (devicesOfType.Any())
+            {
+                foreach (var device in devicesOfType)
+                {
+                    var unreadMessage = unreadMessages.FirstOrDefault(t => t.UserId == device.UserId);
+                    var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
+                    var message = CreateMessage(device, icon, title, content, data, badge, deviceType);
+                    messages.Add(message);
+                }
+            }
+        }
+
+        if (messages.Any())
+        {
+            int batchSize = _messagePushOptions.SendAllBatchSize;
+            var batchCount = (int)Math.Ceiling((double)messages.Count / batchSize);
+
+            for (int i = 0; i < batchCount; i++)
+            {
+                var batchMessages = messages.Skip(i * batchSize).Take(batchSize).ToList();
+                var result = await FirebaseMessaging.DefaultInstance.SendAllAsync(batchMessages);
+                _logger.LogDebug("Batch {batchNumber}/{totalBatches} sent, messages: {messages}, result: {result}",
+                    i + 1,
+                    batchCount,
+                    JsonConvert.SerializeObject(batchMessages,
+                        new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }),
+                    JsonConvert.SerializeObject(result,
+                        new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }));
+            }
+        }
+    }
+
+    private Message CreateMessage(UserDeviceIndex device, string icon, string title, string content,
+        Dictionary<string, string> data, int badge, DeviceType deviceType)
+    {
+        var message = new Message()
+        {
+            Notification = MessageHelper.GetNotification(title, content, icon),
+            Token = device.RegistrationToken,
+            Data = data
+        };
+
+        switch (deviceType)
+        {
+            case DeviceType.Android:
+                message.Android = MessageHelper.GetAndroidConfig(1); // Set badge to 1 for Android
+                break;
+            case DeviceType.IOS:
+                message.Apns = MessageHelper.GetApnsConfig(badge);
+                break;
+            case DeviceType.Extension:
+                message.Webpush = MessageHelper.GetWebPushConfig(badge);
+                break;
+        }
+
+        return message;
+    }
+
+    private void TryHandleExceptionAsync(List<UserDeviceIndex> userDevices, BatchResponse batchResponse) 
     {
         if (batchResponse == null || batchResponse.Responses.IsNullOrEmpty()) return;
         for (var i = 0; i < batchResponse.Responses.Count; i++)
         {
             var response = batchResponse.Responses[i];
             if (response == null || response.Exception == null) continue;
-            var user = userDevice[i];
+            var user = userDevices[i];
             
             _ = HandleExceptionAsync(response.Exception.Message, user.Id, user.RegistrationToken);
         }
