@@ -2,15 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using AElf.Indexing.Elasticsearch;
 using MessagePush.Common;
 using MessagePush.Commons;
 using MessagePush.DeviceInfo;
 using MessagePush.Entities.Es;
+using MessagePush.Entities.Redis;
 using MessagePush.MessagePush.Dtos;
 using MessagePush.MessagePush.Provider;
+using MessagePush.Options;
+using MessagePush.Redis;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nest;
 using Newtonsoft.Json;
 using Volo.Abp;
@@ -22,16 +25,17 @@ namespace MessagePush.MessagePush;
 public class MessagePushAppService : MessagePushBaseService, IMessagePushAppService
 {
     private readonly IMessagePushProvider _messagePushProvider;
-    private readonly INESTRepository<UnreadMessageIndex, string> _unreadMessageIndexRepository;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly MessagePushOptions _messagePushOptions;
+    private readonly RedisClient _redisClient;
 
     public MessagePushAppService(IMessagePushProvider messagePushProvider,
-        INESTRepository<UnreadMessageIndex, string> unreadMessageIndexRepository,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor, IOptionsSnapshot<MessagePushOptions> messagePushOptions, RedisClient redisClient)
     {
         _messagePushProvider = messagePushProvider;
-        _unreadMessageIndexRepository = unreadMessageIndexRepository;
         _httpContextAccessor = httpContextAccessor;
+        _messagePushOptions = messagePushOptions.Value;
+        _redisClient = redisClient;
     }
 
     public async Task PushMessageAsync(MessagePushDto input)
@@ -40,16 +44,17 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var userDevices = await _messagePushProvider.GetUserDevicesAsync(input.UserIds, appId);
         userDevices = userDevices?.Where(t =>
             !t.AppStatus.Equals(AppStatus.Foreground.ToString(), StringComparison.OrdinalIgnoreCase) &&
-            t.ModificationTime > DateTime.Now.AddMonths(-2)).ToList<UserDeviceIndex>();
+            t.ModificationTime > DateTime.Now.SubtractDays(_messagePushOptions.ExpiredDeviceInfoFromDays)).ToList();
         if (userDevices.IsNullOrEmpty()) return;
 
-        var userIds = userDevices.Select(t => t.UserId).ToList();
-        var unreadMessageInfos = await UpdateUnreadCount(userIds);
-        
-        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
-        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessageInfos, input);
-        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessageInfos, input);
+        var userIds = userDevices.Select(t => t.UserId).Distinct().ToList();
+        // var unreadMessageInfos = await UpdateUnreadCount(userIds);
+        var unreadMessages = await UpdateUnreadCountAsync(userIds);
 
+        var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
+        var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessages, input);
+        var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessages, input);
+        
         await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
     }
 
@@ -61,67 +66,42 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             CommonConstant.DefaultContent, input.Data, badge: 0);
     }
 
-    private async Task<List<UnreadMessageIndex>> GetUnreadInfosAsync(List<string> userIds)
+    private List<UnreadMessage> GetUnreadMessagesAsync(List<string> userIds)
     {
-        var mustQuery = new List<Func<QueryContainerDescriptor<UnreadMessageIndex>, QueryContainer>>()
+        List<UnreadMessage> unreadMessages = new List<UnreadMessage>();
+
+        if (userIds != null && userIds.Any())
         {
-            descriptor => descriptor.Terms(i => i.Field(f => f.Id).Terms(userIds))
-        };
-
-        QueryContainer Filter(QueryContainerDescriptor<UnreadMessageIndex> f) => f.Bool(b => b.Must(mustQuery));
-        var result = await _unreadMessageIndexRepository.GetListAsync(Filter);
-
-        return result.Item2;
+            foreach (var userId in userIds)
+            {
+                var unreadMessage = new UnreadMessage()
+                    {
+                        UserId = userId,
+                        AppId = "PortKey",
+                        MessageType = MessageType.RelationOne.ToString()
+                    };
+                    var value = _redisClient.IncrementAndGet(unreadMessage.GetKey());
+                    unreadMessage.UnreadCount = value;
+                    unreadMessages.Add(unreadMessage);
+            }
+        }
+        
+        return unreadMessages;
     }
 
-    private async Task<List<UnreadMessageIndex>> UpdateUnreadCount(List<string> userIds)
+    private async Task<List<UnreadMessage>> UpdateUnreadCountAsync(List<string> userIds)
     {
-        try
+        var unreadMessagesAsync = GetUnreadMessagesAsync(userIds);
+        if (unreadMessagesAsync != null && unreadMessagesAsync.Any())
         {
-            var unreadInfos = await GetUnreadInfosAsync(userIds);
-
-            foreach (var unreadInfo in unreadInfos)
+            foreach (var unreadMessage in unreadMessagesAsync)
             {
-                if (unreadInfo.UnreadMessageInfos.IsNullOrEmpty())
-                {
-                    unreadInfo.UnreadMessageInfos = new List<UnreadMessageInfo>
-                    {
-                        new UnreadMessageInfo
-                        {
-                            MessageType = MessageType.RelationOne.ToString(),
-                            UnreadCount = 1
-                        }
-                    };
-
-                    continue;
-                }
-
-                var imMessage = unreadInfo.UnreadMessageInfos.FirstOrDefault(t =>
-                    t.MessageType.Equals(MessageType.RelationOne.ToString(), StringComparison.OrdinalIgnoreCase));
-                if (imMessage == null)
-                {
-                    unreadInfo.UnreadMessageInfos.Add(new UnreadMessageInfo()
-                    {
-                        MessageType = MessageType.RelationOne.ToString(),
-                        UnreadCount = 1
-                    });
-                }
-
-                imMessage.UnreadCount++;
+                var json = JsonConvert.SerializeObject(unreadMessage);
+                Logger.LogInformation("unreadMessage: {json}", json);
             }
-
-            if (!unreadInfos.IsNullOrEmpty())
-            {
-                await _unreadMessageIndexRepository.BulkAddOrUpdateAsync(unreadInfos);
-            }
-
-            return unreadInfos;
         }
-        catch (Exception e)
-        {
-            Logger.LogError(e, "param: {data}", JsonConvert.SerializeObject(userIds));
-            return new List<UnreadMessageIndex>();
-        }
+
+        return unreadMessagesAsync;
     }
 
     private string GetAppId()
@@ -145,29 +125,18 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
     }
 
     private async Task HandleAppleDevicesAsync(List<UserDeviceIndex> userDevices,
-        List<UnreadMessageIndex> unreadMessageInfos, MessagePushDto input)
+        List<UnreadMessage> unreadMessages, MessagePushDto input)
     {
         // ios users
-        var iosTokenInfos = userDevices
-            .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase))
-            .Select(t => new { t.Id, t.UserId, t.RegistrationToken }).ToList();
+        var iosDevices = userDevices
+            .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
 
-        var pushTasks = iosTokenInfos.Select(tokenInfo =>
-        {
-            var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
-                ?.UnreadMessageInfos;
-            var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
-
-            return _messagePushProvider.PushAsync(tokenInfo.Id, tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
-                input.Data,
-                badge);
-        });
-        
-        await Task.WhenAll(pushTasks);
+        await _messagePushProvider.SendAllAsync(iosDevices, input.Icon, input.Title, input.Content,
+            input.Data, unreadMessages);
     }
 
     private async Task HandleExtensionDevicesAsync(List<UserDeviceIndex> userDevices,
-        List<UnreadMessageIndex> unreadMessageInfos, MessagePushDto input)
+        List<UnreadMessage> unreadMessages, MessagePushDto input)
     {
         var extensionDevices = userDevices
             .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.Extension.ToString(),
@@ -176,8 +145,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
 
         var pushTasks = extensionDevices.Select(tokenInfo =>
         {
-            var unreadMessage = unreadMessageInfos.FirstOrDefault(t => t.UserId == tokenInfo.UserId)
-                ?.UnreadMessageInfos;
+            var unreadMessage = unreadMessages.FirstOrDefault(t => t.UserId == tokenInfo.UserId);
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
             Logger.LogInformation("push to extension, count: {count}", extensionDevices.Count);

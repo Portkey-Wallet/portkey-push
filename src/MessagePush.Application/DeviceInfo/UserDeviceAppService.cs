@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using MessagePush.Commons;
@@ -39,8 +40,10 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
 
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report device info, appId: {appId}, id: {id}", deviceInfo.AppId ?? string.Empty, id);
+        
+        TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria.FromUserDeviceInfoDto(input));
     }
-
+    
     public async Task ReportAppStatusAsync(ReportAppStatusDto input)
     {
         var id = DeviceInfoHelper.GetId(input.UserId, input.DeviceId, input.NetworkType.ToString());
@@ -58,6 +61,29 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report app status, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
+        
+        TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria.FromReportAppStatusDto(input));
+    }
+    
+    
+    private async void TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria criteria)
+    {
+        
+        if (criteria.LoginUserIds == null || !criteria.LoginUserIds.Any())
+        {
+            return;
+        }
+        
+        var invalidDeviceInfos = await _userDeviceProvider.GetInvalidDeviceInfos(criteria);
+        if (invalidDeviceInfos != null && invalidDeviceInfos.Any())
+        {
+            Logger.LogDebug("Invalid device attempts exist, trying to delete them.");
+            foreach (var invalidDeviceInfo in invalidDeviceInfos)
+            {
+                await _userDeviceProvider.DeleteUserDeviceAsync(invalidDeviceInfo.Id);
+                Logger.LogDebug("delete invalid device info, id: {id}, invalidDeviceInfo: {invalidDeviceInfo}", invalidDeviceInfo.Id, JsonConvert.SerializeObject(invalidDeviceInfo));
+            }
+        }
     }
 
     public async Task ExitWalletAsync(ExitWalletDto input)
