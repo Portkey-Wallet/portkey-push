@@ -5,7 +5,7 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Medallion.Threading;
 using Medallion.Threading.Redis;
-using MessagePush.Grains;
+using MessagePush.Common;
 using MessagePush.MongoDb;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -15,11 +15,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
-using Orleans;
-using Orleans.Configuration;
-using Orleans.Providers.MongoDB.Configuration;
 using StackExchange.Redis;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Mvc;
@@ -33,7 +29,6 @@ using Volo.Abp.Localization;
 using Volo.Abp.Modularity;
 using Volo.Abp.OpenIddict.Tokens;
 using Volo.Abp.Swashbuckle;
-using Volo.Abp.Threading;
 
 namespace MessagePush;
 
@@ -206,6 +201,8 @@ public class MessagePushHttpApiHostModule : AbpModule
         {
             Credential = GoogleCredential.FromFile("firebase.config.json")
         });
+        
+        ConfigurationProvidersHelper.DisplayConfigurationProviders(context);
     }
 
     private void ConfigureTokenCleanupService()
