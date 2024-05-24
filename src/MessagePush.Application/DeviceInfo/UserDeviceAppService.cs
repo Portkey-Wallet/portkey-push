@@ -11,10 +11,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Volo.Abp;
+using Volo.Abp.Auditing;
 
 namespace MessagePush.DeviceInfo;
 
-[RemoteService(false)]
+[RemoteService(false), DisableAuditing]
 public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppService
 {
     private readonly INESTRepository<UserDeviceIndex, string> _deviceInfoRepository;
@@ -31,6 +32,7 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
 
     public async Task ReportDeviceInfoAsync(UserDeviceInfoDto input)
     {
+        await DeleteDeviceInfoAsync(input.DeviceId);
         var id = DeviceInfoHelper.GetId(input.UserId, input.DeviceId, input.NetworkType.ToString());
         var deviceInfo = ObjectMapper.Map<UserDeviceInfoDto, UserDeviceIndex>(input);
         deviceInfo.Id = id;
@@ -40,10 +42,8 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
 
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report device info, appId: {appId}, id: {id}", deviceInfo.AppId ?? string.Empty, id);
-        
-        TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria.FromUserDeviceInfoDto(input));
     }
-    
+
     public async Task ReportAppStatusAsync(ReportAppStatusDto input)
     {
         var id = DeviceInfoHelper.GetId(input.UserId, input.DeviceId, input.NetworkType.ToString());
@@ -61,19 +61,24 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
         await _deviceInfoRepository.AddOrUpdateAsync(deviceInfo);
         Logger.LogDebug("report app status, appId: {appId}, id: {id},  status: {status}",
             deviceInfo.AppId ?? string.Empty, id, deviceInfo.AppStatus);
-        
-        TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria.FromReportAppStatusDto(input));
     }
-    
-    
+
+
+    private async Task DeleteDeviceInfoAsync(string deviceId)
+    {
+        var (totalCount, data) = await _userDeviceProvider.GetDeviceInfoListAsync(deviceId);
+        if (totalCount == 0) return;
+
+        await _deviceInfoRepository.BulkDeleteAsync(data);
+    }
+
     private async void TryDeleteInvalidDeviceInfo(InvalidDeviceCriteria criteria)
     {
-        
         if (criteria.LoginUserIds == null || !criteria.LoginUserIds.Any())
         {
             return;
         }
-        
+
         var invalidDeviceInfos = await _userDeviceProvider.GetInvalidDeviceInfos(criteria);
         if (invalidDeviceInfos != null && invalidDeviceInfos.Any())
         {
@@ -81,16 +86,16 @@ public class UserDeviceAppService : MessagePushBaseService, IUserDeviceAppServic
             foreach (var invalidDeviceInfo in invalidDeviceInfos)
             {
                 await _userDeviceProvider.DeleteUserDeviceAsync(invalidDeviceInfo.Id);
-                Logger.LogDebug("delete invalid device info, id: {id}, invalidDeviceInfo: {invalidDeviceInfo}", invalidDeviceInfo.Id, JsonConvert.SerializeObject(invalidDeviceInfo));
+                Logger.LogDebug("delete invalid device info, id: {id}, invalidDeviceInfo: {invalidDeviceInfo}",
+                    invalidDeviceInfo.Id, JsonConvert.SerializeObject(invalidDeviceInfo));
             }
         }
     }
 
     public async Task ExitWalletAsync(ExitWalletDto input)
     {
-        var id = DeviceInfoHelper.GetId(input.UserId, input.DeviceId, input.NetworkType.ToString());
-        await _deviceInfoRepository.DeleteAsync(id);
-        Logger.LogDebug("report exit wallet id: {id}", id);
+        await DeleteDeviceInfoAsync(input.DeviceId);
+        Logger.LogDebug("report exit wallet deviceId: {deviceId}", input.DeviceId);
     }
 
     public async Task SwitchNetworkAsync(SwitchNetworkDto input)
