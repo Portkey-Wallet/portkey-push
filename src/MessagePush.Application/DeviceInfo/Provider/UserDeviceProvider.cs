@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using AElf.Indexing.Elasticsearch;
 using MessagePush.Commons;
@@ -16,6 +15,7 @@ namespace MessagePush.DeviceInfo.Provider;
 public interface IUserDeviceProvider
 {
     Task<UserDeviceIndex> GetDeviceInfoAsync(string id);
+    Task<(long totalCount, List<UserDeviceIndex> data)> GetDeviceInfoListAsync(string deviceId);
     Task DeleteUserDeviceAsync(string id);
     Task UpdateUnreadInfoAsync(string appId, string userId, int unreadCount);
     Task<List<UserDeviceIndex>> GetInvalidDeviceInfos(InvalidDeviceCriteria criteria);
@@ -43,6 +43,16 @@ public class UserDeviceProvider : IUserDeviceProvider, ISingletonDependency
 
         QueryContainer Filter(QueryContainerDescriptor<UserDeviceIndex> f) => f.Bool(b => b.Must(mustQuery));
         return await _userDeviceRepository.GetAsync(Filter);
+    }
+
+    public async Task<(long totalCount, List<UserDeviceIndex> data)> GetDeviceInfoListAsync(string deviceId)
+    {
+        var mustQuery = new List<Func<QueryContainerDescriptor<UserDeviceIndex>, QueryContainer>>() { };
+        mustQuery.Add(q => q.Term(i => i.Field(f => f.DeviceId).Value(deviceId)));
+
+        QueryContainer Filter(QueryContainerDescriptor<UserDeviceIndex> f) => f.Bool(b => b.Must(mustQuery));
+        var result = await _userDeviceRepository.GetListAsync(Filter);
+        return (result.Item1, result.Item2);
     }
 
     public async Task DeleteUserDeviceAsync(string id)

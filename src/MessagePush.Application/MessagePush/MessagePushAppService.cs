@@ -14,14 +14,14 @@ using MessagePush.Redis;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nest;
 using Newtonsoft.Json;
 using Volo.Abp;
+using Volo.Abp.Auditing;
 using Volo.Abp.Validation;
 
 namespace MessagePush.MessagePush;
 
-[RemoteService(false)]
+[RemoteService(false), DisableAuditing]
 public class MessagePushAppService : MessagePushBaseService, IMessagePushAppService
 {
     private readonly IMessagePushProvider _messagePushProvider;
@@ -30,7 +30,8 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
     private readonly RedisClient _redisClient;
 
     public MessagePushAppService(IMessagePushProvider messagePushProvider,
-        IHttpContextAccessor httpContextAccessor, IOptionsSnapshot<MessagePushOptions> messagePushOptions, RedisClient redisClient)
+        IHttpContextAccessor httpContextAccessor, IOptionsSnapshot<MessagePushOptions> messagePushOptions,
+        RedisClient redisClient)
     {
         _messagePushProvider = messagePushProvider;
         _httpContextAccessor = httpContextAccessor;
@@ -54,7 +55,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         var handleAndroidDevicesTask = HandleAndroidDevicesAsync(userDevices, input);
         var handleAppleDevicesTask = HandleAppleDevicesAsync(userDevices, unreadMessages, input);
         var handleExtensionDevicesTask = HandleExtensionDevicesAsync(userDevices, unreadMessages, input);
-        
+
         await Task.WhenAll(handleAndroidDevicesTask, handleAppleDevicesTask, handleExtensionDevicesTask);
     }
 
@@ -75,17 +76,17 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             foreach (var userId in userIds)
             {
                 var unreadMessage = new UnreadMessage()
-                    {
-                        UserId = userId,
-                        AppId = "PortKey",
-                        MessageType = MessageType.RelationOne.ToString()
-                    };
-                    var value = _redisClient.IncrementAndGet(unreadMessage.GetKey());
-                    unreadMessage.UnreadCount = value;
-                    unreadMessages.Add(unreadMessage);
+                {
+                    UserId = userId,
+                    AppId = "PortKey",
+                    MessageType = MessageType.RelationOne.ToString()
+                };
+                var value = _redisClient.IncrementAndGet(unreadMessage.GetKey());
+                unreadMessage.UnreadCount = value;
+                unreadMessages.Add(unreadMessage);
             }
         }
-        
+
         return unreadMessages;
     }
 
@@ -120,7 +121,7 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
         // android user
         var androidDevices = userDevices.Where(t =>
             t.DeviceInfo.DeviceType.Equals(DeviceType.Android.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
-        
+
         await _messagePushProvider.BulkPushAsync(androidDevices, input.Icon, input.Title, input.Content, input.Data);
     }
 
@@ -129,7 +130,8 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
     {
         // ios users
         var iosDevices = userDevices
-            .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
+            .Where(t => t.DeviceInfo.DeviceType.Equals(DeviceType.IOS.ToString(), StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         await _messagePushProvider.SendAllAsync(iosDevices, input.Icon, input.Title, input.Content,
             input.Data, unreadMessages);
@@ -149,7 +151,8 @@ public class MessagePushAppService : MessagePushBaseService, IMessagePushAppServ
             var badge = UnreadMessageHelper.GetUnreadCount(unreadMessage);
 
             Logger.LogInformation("push to extension, count: {count}", extensionDevices.Count);
-            return _messagePushProvider.PushAsync(tokenInfo.Id, tokenInfo.RegistrationToken, input.Icon, input.Title, input.Content,
+            return _messagePushProvider.PushAsync(tokenInfo.Id, tokenInfo.RegistrationToken, input.Icon, input.Title,
+                input.Content,
                 input.Data,
                 badge);
         });
