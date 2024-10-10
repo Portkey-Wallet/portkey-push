@@ -31,9 +31,9 @@ public class ClusterFixture : IDisposable, ISingletonDependency
     public TestCluster Cluster { get; private set; }
 
 
-    private class TestSiloConfigurations : ISiloBuilderConfigurator
+    private class TestSiloConfigurations : ISiloConfigurator
     {
-        public void Configure(ISiloHostBuilder hostBuilder)
+        public void Configure(ISiloBuilder hostBuilder)
         {
             hostBuilder.ConfigureServices(services =>
                 {
@@ -75,12 +75,15 @@ public class ClusterFixture : IDisposable, ISingletonDependency
                     services.OnExposing(onServiceExposingContext =>
                     {
                         //Register types for IObjectMapper<TSource, TDestination> if implements
-                        onServiceExposingContext.ExposedTypes.AddRange(
-                            ReflectionHelper.GetImplementedGenericTypes(
-                                onServiceExposingContext.ImplementationType,
-                                typeof(IObjectMapper<,>)
-                            )
+                        var implementedTypes = ReflectionHelper.GetImplementedGenericTypes(
+                            onServiceExposingContext.ImplementationType,
+                            typeof(IObjectMapper<,>)
                         );
+
+                        foreach (var type in implementedTypes)
+                        {
+                            onServiceExposingContext.ExposedTypes.Add(new ServiceIdentifier(type));
+                        }
                     });
                     services.AddTransient(
                         typeof(IObjectMapper<>),

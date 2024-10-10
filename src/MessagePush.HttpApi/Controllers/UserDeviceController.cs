@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Asp.Versioning;
 using MessagePush.DeviceInfo;
 using MessagePush.DeviceInfo.Dtos;
 using Microsoft.AspNetCore.Mvc;
