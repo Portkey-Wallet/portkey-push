@@ -24,7 +24,7 @@ public static class ConfigurationProvidersHelper
                 Log.Warning("ConfigurationProvider: {0}", provider.ToString());
             }
         }
-        catch (Exception e)
+        catch (System.Exception e)
         {
             Log.Error(e, "display configuration providers error.");
         }

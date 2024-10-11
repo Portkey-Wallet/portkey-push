@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AElf.ExceptionHandler;
 using AElf.Indexing.Elasticsearch;
 using FirebaseAdmin.Messaging;
 using MessagePush.Common;
@@ -9,6 +10,7 @@ using MessagePush.Commons;
 using MessagePush.DeviceInfo;
 using MessagePush.Entities.Es;
 using MessagePush.Entities.Redis;
+using MessagePush.Exception;
 using MessagePush.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -84,12 +86,13 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
         return await _userDeviceRepository.GetAsync(Filter);
     }
 
+    [ExceptionHandler(typeof(System.Exception), Message = "multicast send firebase exception",
+        TargetType = typeof(ApplicationExceptionHandler),
+        MethodName = nameof(ApplicationExceptionHandler.BulkPushHandleException))]
     public async Task BulkPushAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
         var tokens = userDevices.Select(t => t.RegistrationToken).ToList();
-        try
-        {
             if (tokens.IsNullOrEmpty()) return;
             icon = icon.IsNullOrWhiteSpace() ? null : icon;
             var message = new MulticastMessage()
@@ -116,12 +119,6 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
                 result.SuccessCount);
             
             TryHandleExceptionAsync(userDevices, result);
-        }
-        catch (Exception e)
-        {
-            _logger.LogError(e, "multicast send firebase exception, {token}, title: {title}, content:{content}", tokens,
-                title, content);
-        }
     }
 
     public async Task PushAsync(string indexId, string token, string icon, string title, string content,
@@ -152,7 +149,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
 
             _logger.LogDebug("send to firebase success, title:{title}, content:{content}", title, content);
         }
-        catch (Exception e)
+        catch (System.Exception e)
         {
             _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
                 content);

@@ -1,4 +1,5 @@
 ﻿using System.Configuration;
+using AElf.ExceptionHandler;
 using MessagePush.Grains;
 using MessagePush.Options;
 using MessagePush.Redis;
@@ -25,7 +26,8 @@ namespace MessagePush;
     typeof(AbpFeatureManagementApplicationModule),
     typeof(AbpSettingManagementApplicationModule),
     typeof(MessagePushGrainsModule),
-    typeof(AbpDistributedLockingModule)
+    typeof(AbpDistributedLockingModule),
+    typeof(AOPExceptionModule)
 )]
 public class MessagePushApplicationModule : AbpModule
 {

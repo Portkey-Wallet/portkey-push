@@ -1,3 +1,4 @@
+using AElf.ExceptionHandler;
 using MessagePush.Grains;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.AspNetCore.Serilog;
@@ -8,7 +9,8 @@ namespace MessagePush.Silo;
 
 [DependsOn(typeof(AbpAutofacModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(MessagePushGrainsModule)
+    typeof(MessagePushGrainsModule),
+    typeof(AOPExceptionModule)
 )]
 public class MessagePushOrleansSiloModule : AbpModule
 {

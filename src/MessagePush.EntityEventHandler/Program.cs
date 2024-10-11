@@ -37,7 +37,7 @@ namespace MessagePush.EntityEventHandler
                 await CreateHostBuilder(args).RunConsoleAsync();
                 return 0;
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 Log.Fatal(ex, "Host terminated unexpectedly!");
                 return 1;

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Serilog;
 using Serilog.Events;
 
@@ -5,9 +6,10 @@ namespace MessagePush.Common;
 
 public static class LogHelper
 {
-    public static ILogger CreateLogger(LogEventLevel logEventLevel)
+    public static ILogger CreateLogger(LogEventLevel logEventLevel, IConfigurationRoot configuration)
     {
         return new LoggerConfiguration()
+            .ReadFrom.Configuration(configuration)
             .MinimumLevel.Is(logEventLevel)
             .Enrich.FromLogContext()
             .WriteTo.Async(c =>

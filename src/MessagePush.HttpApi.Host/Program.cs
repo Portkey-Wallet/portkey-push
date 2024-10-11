@@ -1,8 +1,8 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using MessagePush.Common;
 using MessagePush.ScheduledTasks;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -12,9 +12,12 @@ namespace MessagePush;
 
 public class Program
 {
-    public async static Task<int> Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        Log.Logger = LogHelper.CreateLogger(LogEventLevel.Debug);
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json")
+            .Build();
+        Log.Logger = LogHelper.CreateLogger(LogEventLevel.Debug, configuration);
 
         try
         {
@@ -34,14 +37,14 @@ public class Program
             await app.RunAsync();
             return 0;
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
             Log.Fatal(ex, "Host terminated unexpectedly!");
             return 1;
         }
         finally
         {
-            Log.CloseAndFlush();
+            await Log.CloseAndFlushAsync();
         }
     }
 }

@@ -1,6 +1,5 @@
 using System;
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
 using Microsoft.IdentityModel.Tokens;
 
 namespace MessagePush.Commons;
@@ -35,33 +34,5 @@ public static class JwtHelper
         result.RequireSignedTokens = false;
 
         return result;
-    }
-
-    public static string ExtractRelationIdFromToken(string token)
-    {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var relationId = "";
-        if (string.IsNullOrEmpty(token))
-        {
-            return relationId;
-        }
-        var tokenWithoutPrefix = token.StartsWith("Bearer ")
-            ? token.Substring("Bearer ".Length)
-            : token;
-        try
-        {
-            tokenHandler.ValidateToken(tokenWithoutPrefix, CreateTokenValidationParameters(), out var validatedToken);
-
-            // Get claims from validated token
-            var claims = (JwtSecurityToken)validatedToken;
-
-            // Access individual claims
-            relationId = claims.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-        }
-        catch (Exception e)
-        {
-        }
-
-        return relationId;
     }
 }
