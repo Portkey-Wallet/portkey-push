@@ -15,18 +15,11 @@ public static class ConfigurationProvidersHelper
     /// <param name="context"></param>
     public static void DisplayConfigurationProviders(ApplicationInitializationContext context)
     {
-        try
+        var configuration = context.GetConfiguration();
+        var configurationRoot = (IConfigurationRoot)configuration;
+        foreach (var provider in configurationRoot.Providers.ToList())
         {
-            var configuration = context.GetConfiguration();
-            var configurationRoot = (IConfigurationRoot)configuration;
-            foreach (var provider in configurationRoot.Providers.ToList())
-            {
-                Log.Warning("ConfigurationProvider: {0}", provider.ToString());
-            }
-        }
-        catch (System.Exception e)
-        {
-            Log.Error(e, "display configuration providers error.");
+            Log.Warning("ConfigurationProvider: {0}", provider.ToString());
         }
     }
 }

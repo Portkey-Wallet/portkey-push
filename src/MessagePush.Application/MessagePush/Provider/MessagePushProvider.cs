@@ -89,7 +89,7 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
     [ExceptionHandler(typeof(System.Exception), Message = "multicast send firebase exception",
         TargetType = typeof(ApplicationExceptionHandler),
         MethodName = nameof(ApplicationExceptionHandler.BulkPushHandleException))]
-    public async Task BulkPushAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
+    public virtual async Task BulkPushAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
         var tokens = userDevices.Select(t => t.RegistrationToken).ToList();
@@ -121,41 +121,34 @@ public class MessagePushProvider : IMessagePushProvider, ISingletonDependency
             TryHandleExceptionAsync(userDevices, result);
     }
 
-    public async Task PushAsync(string indexId, string token, string icon, string title, string content,
+    [ExceptionHandler(typeof(System.Exception), Message = "send firebase exception",
+        TargetType = typeof(ApplicationExceptionHandler), LogTargets = ["token", "title", "content"],
+        MethodName = nameof(ApplicationExceptionHandler.PushHandleException))]
+    public virtual async Task PushAsync(string indexId, string token, string icon, string title, string content,
         Dictionary<string, string> data, int badge = 1)
     {
-        try
+        if (token.IsNullOrEmpty()) return;
+        icon = icon.IsNullOrWhiteSpace() ? null : icon;
+        var message = new Message()
         {
-            if (token.IsNullOrEmpty()) return;
-            icon = icon.IsNullOrWhiteSpace() ? null : icon;
-            var message = new Message()
-            {
-                Notification = MessageHelper.GetNotification(title, content, icon),
-                Token = token,
-                Android = MessageHelper.GetAndroidConfig(badge),
-                Apns = MessageHelper.GetApnsConfig(badge),
-                Webpush = MessageHelper.GetWebPushConfig(badge),
-                Data = data
-            };
+            Notification = MessageHelper.GetNotification(title, content, icon),
+            Token = token,
+            Android = MessageHelper.GetAndroidConfig(badge),
+            Apns = MessageHelper.GetApnsConfig(badge),
+            Webpush = MessageHelper.GetWebPushConfig(badge),
+            Data = data
+        };
 
-            var result = await FirebaseMessaging.DefaultInstance.SendAsync(message);
+        var result = await FirebaseMessaging.DefaultInstance.SendAsync(message);
 
-            if (result.IsNullOrEmpty())
-            {
-                _logger.LogError("send firebase error, result is null, title:{title}, content:{content}", title,
-                    content);
-                return;
-            }
-
-            _logger.LogDebug("send to firebase success, title:{title}, content:{content}", title, content);
-        }
-        catch (System.Exception e)
+        if (result.IsNullOrEmpty())
         {
-            _logger.LogError(e, "send firebase exception, {token}, title: {title}, content:{content}", token, title,
+            _logger.LogError("send firebase error, result is null, title:{title}, content:{content}", title,
                 content);
-            
-            _ = HandleExceptionAsync(e.Message, indexId, token);
+            return;
         }
+
+        _logger.LogDebug("send to firebase success, title:{title}, content:{content}", title, content);
     }
 
     public async Task SendAllAsync(List<UserDeviceIndex> userDevices, string icon, string title, string content,

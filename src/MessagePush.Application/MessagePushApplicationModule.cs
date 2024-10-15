@@ -1,5 +1,5 @@
 ﻿using System.Configuration;
-using AElf.ExceptionHandler;
+using AElf.ExceptionHandler.ABP;
 using MessagePush.Grains;
 using MessagePush.Options;
 using MessagePush.Redis;

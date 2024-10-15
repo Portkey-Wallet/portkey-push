@@ -1,4 +1,4 @@
-using AElf.ExceptionHandler;
+using AElf.ExceptionHandler.ABP;
 using MessagePush.Grains;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.AspNetCore.Serilog;

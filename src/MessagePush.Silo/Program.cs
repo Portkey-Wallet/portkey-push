@@ -8,7 +8,7 @@ using Serilog.Events;
 namespace MessagePush.Silo;
 public class Program
 {
-    public async static Task<int> Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
         var configuration = new ConfigurationBuilder()
             .AddJsonFile("appsettings.json")
@@ -25,23 +25,11 @@ public class Program
             .WriteTo.Async(c => c.Console())
             .CreateLogger();
         
-        try
-        {
             Log.Information("Starting MessagePush.Silo.");
 
             await CreateHostBuilder(args).RunConsoleAsync();
 
             return 0;
-        }
-        catch (Exception ex)
-        {
-            Log.Fatal(ex, "Host terminated unexpectedly!");
-            return 1;
-        }
-        finally
-        {
-            Log.CloseAndFlush();
-        }
     }
 
     internal static IHostBuilder CreateHostBuilder(string[] args) =>

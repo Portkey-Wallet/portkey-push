@@ -374,25 +374,10 @@ public class ClusterFixture : IDisposable, ISingletonDependency
                 }
             }
 
-            byte[] cachedBytes;
-
-            try
-            {
-                cachedBytes = await Cache.GetAsync(
-                    NormalizeKey(key),
-                    CancellationTokenProvider.FallbackToProvider(token)
-                );
-            }
-            catch (Exception ex)
-            {
-                if (hideErrors == true)
-                {
-                    await HandleExceptionAsync(ex);
-                    return null;
-                }
-
-                throw;
-            }
+            byte[] cachedBytes = await Cache.GetAsync(
+                NormalizeKey(key),
+                CancellationTokenProvider.FallbackToProvider(token)
+            );
 
             if (cachedBytes == null)
             {
@@ -509,25 +494,12 @@ public class ClusterFixture : IDisposable, ISingletonDependency
             {
                 hideErrors = hideErrors ?? _distributedCacheOption.HideErrors;
 
-                try
-                {
-                    await Cache.SetAsync(
-                        NormalizeKey(key),
-                        Serializer.Serialize(value),
-                        options ?? DefaultCacheOptions,
-                        CancellationTokenProvider.FallbackToProvider(token)
-                    );
-                }
-                catch (Exception ex)
-                {
-                    if (hideErrors == true)
-                    {
-                        await HandleExceptionAsync(ex);
-                        return;
-                    }
-
-                    throw;
-                }
+                await Cache.SetAsync(
+                    NormalizeKey(key),
+                    Serializer.Serialize(value),
+                    options ?? DefaultCacheOptions,
+                    CancellationTokenProvider.FallbackToProvider(token)
+                );
             }
 
             if (ShouldConsiderUow(considerUow))

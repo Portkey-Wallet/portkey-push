@@ -31,21 +31,9 @@ namespace MessagePush.EntityEventHandler
 #endif
                 .CreateLogger();
 
-            try
-            {
                 Log.Information("Starting MessagePush.EntityEventHandler.");
                 await CreateHostBuilder(args).RunConsoleAsync();
                 return 0;
-            }
-            catch (System.Exception ex)
-            {
-                Log.Fatal(ex, "Host terminated unexpectedly!");
-                return 1;
-            }
-            finally
-            {
-                Log.CloseAndFlush();
-            }
         }
         
         internal static IHostBuilder CreateHostBuilder(string[] args) =>
